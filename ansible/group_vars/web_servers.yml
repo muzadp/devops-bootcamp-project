@@ -1,0 +1,6 @@
+---
+ecr_repository_url: "175558635506.dkr.ecr.ap-southeast-1.amazonaws.com/devops-bootcamp/final-project-mujadp"
+aws_region: "ap-southeast-1"
+aws_account_id: "175558635506"
+app_name: "my-devops-app"
+app_port: 80

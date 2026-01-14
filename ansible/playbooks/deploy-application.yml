@@ -1,0 +1,101 @@
+---
+- name: Deploy application on web server
+  hosts: web_servers
+  become: yes
+  vars_files:
+    - ../group_vars/web_servers.yml
+  tasks:
+    - name: Install prerequisites for AWS CLI
+      apt:
+        name:
+          - unzip
+          - curl
+        state: present
+        update_cache: yes
+
+    - name: Check if AWS CLI v2 is installed
+      command: aws --version
+      register: aws_cli_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Download AWS CLI v2
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+      when: aws_cli_check.rc != 0
+
+    - name: Unzip AWS CLI v2
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp/
+        remote_src: yes
+      when: aws_cli_check.rc != 0
+
+    - name: Install AWS CLI v2
+      command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+      when: aws_cli_check.rc != 0
+
+    - name: Clean up AWS CLI installation files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/awscliv2.zip
+        - /tmp/aws
+      when: aws_cli_check.rc != 0
+
+    - name: Create AWS credentials directory for root user
+      file:
+        path: /root/.aws
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy AWS credentials to root
+      copy:
+        src: ~/.aws/credentials
+        dest: /root/.aws/credentials
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Copy AWS config to root
+      copy:
+        src: ~/.aws/config
+        dest: /root/.aws/config
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Login to ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com
+
+    - name: Pull Docker image from ECR
+      docker_image:
+        name: "{{ ecr_repository_url }}"
+        tag: latest
+        source: pull
+        force_source: yes
+
+    - name: Stop and remove existing container
+      docker_container:
+        name: "{{ app_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Run application container
+      docker_container:
+        name: "{{ app_name }}"
+        image: "{{ ecr_repository_url }}:latest"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ app_port }}:80"
+        env:
+          NODE_ENV: production

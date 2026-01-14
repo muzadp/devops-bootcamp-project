@@ -1,0 +1,20 @@
+---
+- name: Deploy Node Exporter on web server
+  hosts: web_servers
+  become: yes
+  tasks:
+    - name: Run Node Exporter container
+      docker_container:
+        name: node-exporter
+        image: prom/node-exporter:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "9100:9100"
+        command:
+          - '--path.rootfs=/host'
+          - '--path.procfs=/host/proc'
+          - '--path.sysfs=/host/sys'
+          - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+        volumes:
+          - '/:/host:ro,rslave'
